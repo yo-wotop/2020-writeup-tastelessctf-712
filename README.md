@@ -32,12 +32,14 @@ Easy peasy, right? The first file contained 0x11 `PNG` bytes. We'll simply loop 
 
 With this set back, we figured that the amount of characters within each file must vary. We knew that the data ended where the footer began, which was clearly noted within the header properties. However, we needed to determine a way to know the length of the packed body data. Or the end of the packed body data. Or the length of the `PNG` data.
 
-With more research into the `7z` specification, we eventually stumbled upon a [7z_parser.py](https://github.com/yo-wotop/2020-writeup-tastelessctf-712/blob/main/solution/7z_parser.py). By running it against a variety of files, we noticed a pattern emerge:  
+With more research into the `7z` specification, we eventually stumbled upon [7z_parser.py](https://github.com/yo-wotop/2020-writeup-tastelessctf-712/blob/main/solution/7z_parser.py). I have no idea who wrote this thing, as I can only find it on some random github repository with a bunch of other, unrelated tools. By running it against a variety of files, we noticed a pattern emerge:  
 
 ![6](https://user-images.githubusercontent.com/72385703/95573491-62cf2900-09e0-11eb-9cfc-84c84b006a9d.png)
 
 
-Note how the `dataOffset`, `packSize[0]`, and `0x20` add up to the exact `0x200` confirmed start of the `PNG` header? We verified that this was also true for `part2_1.7z`, and `part2_2.7z`, even `part2_375.7z`. Not as easy as we first thought, but no sweat. Took us about 40 minutes overall. Now, we had all the pieces necessary to extract the data and create... `solved2.png`!
+Note how the `dataOffset`, `packSize[0]`, and `0x20` add up to the exact `0x200` confirmed start of the `PNG` header? This makes sense, as these are the values that indicate where packed data and offsets from compressed metadata are stored. Adding them together, we get the length of the body data. Combining that with 0x20 (the start of the body data), we obtain the ending address of the body data -- the starting address of the steganographic data!  
+
+We verified that this was also true for `part2_1.7z`, `part2_2.7z`, and even `part2_375.7z`. Not as easy as we first thought, but no sweat. Took us about 40 minutes overall. Now, we had all the pieces necessary to extract the data and create... `solved2.png`!
 
 ![7](https://user-images.githubusercontent.com/72385703/95573680-af1a6900-09e0-11eb-9f62-1d4882122901.png)
 
@@ -60,7 +62,7 @@ Nah, the third try wasn't the charm. Nor was the fourth try. Or the fifth. Or ev
 |11111111|BYTE y[8]|y|
 
 
-So yeah. That's simple enough. And the `7z_parser.py` file? Well, it was coded in Python2. Our script was Python3. That presented no challenges. The `7z_parser.py` was also documented very well, with extremely helpful comments like below.  
+So yeah. That's simple enough. And the `7z_parser.py` file? Well, it was coded in Python2. Our script was Python3. That presented no challenges. It was using bytestreams where we were using dictionaries, too. But at least the `7z_parser.py` was documented very well, with helpful gems like below:  
 
 ```
     ormask = (mask - 0x80)
@@ -70,7 +72,9 @@ So yeah. That's simple enough. And the `7z_parser.py` file? Well, it was coded i
     for i in range(1, inp_len):
 ```
 
-The "lololol" had a special place in our hearts as it mocked our inability to implement it cleanly in Python3 over `solved3-5.png`.  Oh, also, it was using bytestreams where we were using dictionaries. So instead, we settled on a simpler solution:
+<sub><sub><sub>I think I may have figured out who made `7z_parser.py`, considering it seems to have been piped up directly from hell.</sub></sub></sub>
+
+The "lololol" had a special place in our hearts, as it mocked our inability to implement `read_number()` cleanly from `solved3.png` through `solved5.png`. So instead, we settled on a simpler solution:
 
 ```
 import subprocess
@@ -110,7 +114,7 @@ You're reading that correctly. We were running the `7z_parser.py` script **as a 
 
 ## Please Don't Make Us Go To 12
 
-After doing some digging, we discovered the problem. We're idiots. Also, the `7z_parser.py` script simply doesn't work for LZMA2-encoded files that contain File information. Consider the following parse of `part2_5.7z`:  
+After doing some digging, we discovered the problem. We're idiots. Also, the `7z_parser.py` script simply doesn't work for LZMA2-encoded files that contain `File` information. Consider the following parse of `part2_5.7z`:  
 
 ![8](https://user-images.githubusercontent.com/72385703/95575383-792ab400-09e3-11eb-8101-a56a95f6977e.png)
 
@@ -118,13 +122,13 @@ No `data_offset`. No `packSize[0]`. Not even data about the file names, which ar
 
 Desperately thinking that we were going to need to end up with `solved12.png` before getting the flag, we innovated a brand-new solution. One unlike anything we ever tried before.
 
-We COMBINED the ghetto `read_number()` implementation that we half-janked together for `solved3-5.png` as a failsafe, with, and you'll never believe this, the `subprocess` implementation from `solved7.png`. And voila, `solved8.png`  
+We COMBINED the wonky `read_number()` implementation that we half-janked together for `solved3-5.png` as a failsafe, with, and you'll never believe this, the `subprocess` implementation from `solved7.png`. And voila, `solved8.png`  
 
 ![9](https://user-images.githubusercontent.com/72385703/95575546-bbec8c00-09e3-11eb-834f-be15778d522d.png)  
 
 ## Did you parse the properties?
 
-Our victory was shorter lived than my last relationship, unfortunately, as that question immediately slapped us in the face. **"No."** We didn't really parse the properties. We janked it together 8 ways from Sunday. You can find the exact script(s) used in this repository as well, under `solution/`. You shouldn't, though. Nothing good can come from it.  
+Our victory was shorter lived than my last relationship, unfortunately, as that question immediately slapped us in the face. **"No."** We didn't really parse the properties. We janked it together 8 ways from Sunday. You can find the exact script(s) used in this repository as well, under `solution/`. You shouldn't, though. Nothing good can come from that.  
 
 So our solution was a little disheartening. For five distinct reasons:
 
@@ -181,7 +185,7 @@ And since we had an actual internal parsing library, we could make a variety of 
 $ ./7zsteg.py challenge/part2_*.7z >> ez.png
 ```
 
-And just like that, `tstlss{Nice!_Did_you_parse_the_properties?}` is a single line away. It's official.
+And just like that, `tstlss{Nice!_Did_you_parse_the_properties?}` is a single line away. And it's official.
 
 **Yes.** We parsed the properties.
 
